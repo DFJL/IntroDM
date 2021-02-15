@@ -5,7 +5,7 @@ output:
     highlight: espresso
     center: true
     transition: concave
-    self_contained: false
+    self_contained: true
     css: style.css
     reveal_options:
     slideNumber: true
