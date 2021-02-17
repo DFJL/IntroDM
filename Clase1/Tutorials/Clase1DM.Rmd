@@ -1,0 +1,382 @@
+---
+title: "Clase Minería de Datos 1: Web Mining"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+runtime: shiny_prerendered
+theme: united
+description: >
+  Clase 1 de introducción a Minería de datos.Incluye tipos de Web Mining y una intrucción a Web Scrapping con rvest.
+---
+
+```{r setup, include=FALSE}
+
+library(RCurl) 
+library(XML)
+library(stringr) 
+library(rvest)
+library(purrr)
+library(learnr)
+library(knitr)
+library(lubridate)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE,fig.width =10 , fig.height = 8)
+tutorial_options(exercise.timelimit = 120)
+knit_hooks$set(optipng = hook_optipng)
+knit_hooks$set(pngquant = hook_pngquant)
+
+
+#Especificar el url a realizar el scrapping
+url <- 'https://www.imdb.com/search/title/?count=100&release_date=2020&title_type=feature'
+#Leer los datos html del url 
+webpage <- read_html(url)
+webpage
+
+
+#Usar el tag para extraer la información de rank
+rank_data_html <- html_nodes(webpage,'.text-primary')
+#Convertir los datos a texto
+rank_data <- html_text(rank_data_html)
+#Visualizar los resultados
+head(rank_data)
+
+# Function to scrape elements from Amazon reviews
+scrape_amazon <- function(url, throttle = 0){
+  
+  # Set throttle between URL calls
+  sec = 0
+  if(throttle < 0) warning("throttle was less than 0: set to 0")
+  if(throttle > 0) sec = max(0, throttle + runif(1, -1, 1))
+  
+  # obtain HTML of URL
+  doc <- read_html(url)
+  
+  # # Parse relevant elements from HTML
+  # title <- doc %>%
+  #   html_nodes(".a-color-base") %>%
+  #   html_text() 
+  # title<- title[10:length(title)]
+  # 
+  author <- doc %>%
+    html_nodes(".a-profile-name") %>%
+    html_text()
+  
+  date <- doc %>%
+    html_nodes(".review-date") %>%
+    html_text() %>% 
+    gsub(".*on ", "", .)
+  
+  review_format <- doc %>% 
+    html_nodes(".review-format-strip") %>% 
+    html_text() 
+  
+  stars <- doc %>%
+    html_nodes(".review-rating") %>%
+    html_text() %>%
+    str_extract("\\d") %>%
+    as.numeric() 
+  
+  comments <- doc %>%
+    html_nodes(".review-text") %>%
+    html_text() 
+  
+  # Combine attributes into a single data frame
+  df <- data.frame(author, date, review_format, stars, comments, stringsAsFactors = F)
+  
+  return(df)
+}
+
+
+```
+
+![](https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png){width="289"}
+
+## 1- Web Mining
+
+El *Web Mining* es la aplicación de técnicas de Minería de Datos para extraer, procesar y analizar datos no estructurados de documentos y servicios web, para descubrir información potencialmente útil para infinidad de aplicaciones.
+
+## 2- Usos de web Mining
+
+Este sub campo tiene muchas aplicaciones, pero podríamos citar a manera de ejemplo las siguientes:
+
+-   Mejorar el poder de los motores de búsqueda web, mediante la clasificación e identificación de documentos y páginas web.
+
+-   Predecir el comportamiento de los usuarios de la web, para ofrecer experiencias personalizadas , aumentando la satisfacción y por ende la rentabilidad.
+
+-   Para la optimización de las páginas web, con el fin de mejorar sus características para poder rankear mejor en los motores de búsqueda y aumentar rentabilidad.
+
+## 3- Tipos de Web Mining
+
+El *web mining* a su vez se puede subdividir en al menos 3 distintas categorías:
+
+### 3.1 Web Usage Mining
+
+En este tipo de aplicación, se analizan patrones de uso de los servicios web, como por ejemplo datos demográficos, geográficos y sociales de los usuarios para predecir cuál es la probabilidad de visita de los sitios web. De esta manera estas páginas pueden ser pre cargadas para ahorrar tiempo en la carga.
+
+A su vez, se analizan y descubren patrones de los servidores web en forma de archivos log, que contienen datos generados por computadoras de difícil entendimiento por el ser humano. La finalidad de estos análisis es monitorear de manera proactiva la salud de los servicios e identificar posibles problemas de rendimiento o errores no usuales y poder corregir dichos errores a efectos de mantener los servicios trabajando normalmente.Existen algunas herramientas como *splunk* y *elastic Search*, que se especializan en este tipo de minería de datos. Seguidamente podemos ver un video introductorio de *splunk*:
+
+![Splunk Intro](https://www.youtube.com/watch?v=SdhqftLHGUs&t=1s)
+
+### 3.2 Web Structure Mining
+
+En esta aplicación se analizan las relaciones entre los nodos ( páginas web) y las conexiones (hipervínculos entre las páginas) por medio de teoría de grafos o técnicas de análisis de redes sociales .Lo anterior logra identificar como está ubicado un particular sitio web con respecto a su entorno y permite medir que tan relevante e influyente es dicho sitio. Podemos citar como el ejemplo más clásico, el algoritmo *PageRank* de Google, que es utilizado para ranquear los sitios web que se muestran cuando un usuario busca algún término y que es posiblemente el mayor responsable de que esta compañía gobierne el mundo.
+
+![](https://i2.wp.com/colah.github.io/posts/2014-07-FFN-Graphs-Vis/img/graph-HP-ships-labeled.png "Page Rank: One algorithm to rule them all")
+
+### 3.3 Web Content Mining
+
+En este caso, el análisis se centra en extraer información relevante del contenido de los documentos web, que por lo general se encuentra en formato no estructurado como imágenes, videos, texto, audio, etc.En este curso vamos a detallar en este tipo, por medio de técnicas de *Text Mining* o Procesamiento de Lenguaje Natural(NLP, por sus siglas en inglés) que permiten transformar la información no estructurada en un formato estructurado para que pueda ser analizado mediante algoritmos de *machine learning*.
+
+## 4- Web Scrapping
+
+Para poder ahondar en el *web content mining* necesitamos datos de la web para resolver el caso de uso planteado.Aquí es donde puede entrar a jugar la útil ( pero tediosa) herramienta del *web scrapping*.
+
+Esta técnica permite convertir datos en formatos no estructurados o semiestructurados (tags de HTML) desde la web a un formato estructurado para ser consumido o analizado(proceso conocido como *parsing*).
+
+En esta clase, vamos a utilizar el paquete `rvest`de R para realizar el scrapping t tidyverse para el apoyo en la manipulación de los datos.
+
+Sin embargo, debido que cada sitio web es un mundo, se debe usualmente inspeccionar los sitios web a realizar el scrapping para determinar que contenido se desea hacer la extracción y que características tiene.Para esto se puede utilizar la herramienta de apoyo [Selector Gadget](https://selectorgadget.com/) que es una extensión de Google Chrome. Siga las instrucciones del link para poder instalarlo.Una vez instalado se podrá observar la extensión en la parte de arriba a la derecha del navegador:
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2017/03/26153144/WS1.png)
+
+Esta herramienta permite seleccionar la parte de interés a extraer haciendo click y obtener que *tag* de HTML hace referencia, para poderlo utilizar en `rvest`.
+
+## 4-1 Ejemplo "Hola Mundo"
+
+Vamos a realizar el primer ejemplo con la extracción de datos de películas del sitio IMBD, conocido mundialmente por *reviews* de películas.El sitio a realizar el scrapping puede ser visto dando click [acá](%5Bhttps://www.imdb.com/search/title/count=100&release_date=2020&title_type=feature%5D(https://www.imdb.com/search/title/?count=100&release_date=2020&title_type=feature))
+
+### Paso 1
+
+En R, se debe cargar rvest y setear un objeto con la dirección url a realizar el scrapping, así como utilizar la función `read_html` para leer el contenido total de la página en cuestión:
+
+```{r E0,exercise=T}
+
+#Cargar paquete
+library('rvest')
+#Especificar el url a realizar el scrapping
+url <- 'https://www.imdb.com/search/title/?count=100&release_date=2020&title_type=feature'
+#Leer los datos html del url 
+webpage <- read_html(url)
+webpage
+
+```
+
+### Paso 2
+
+Ahora, debemos decidir que contenido vamos a realizar el scrapping del sitio.En este caso vamos a escoger lo siguiente:
+
+-   **Rank:** El rango de la película del 1 al 100 (películas lanzadas en 2020).
+
+-   **Title:** Título de la película.
+
+-   **Description:** Descripción textual del sitio.
+
+-   **Runtime:** Duración de la película.
+
+-   **Rating:** El rating otorgado por IMBD.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2017/03/26153154/WS2.png)
+
+Vamos a iniciar con **Rank**.Para esto, vamos al sitio web y damos click al *Selector Gadged*.Esto nos ayudará a encontrar el *tag* específico de este campo dentro del sitio web.
+
+Debemos asegurarnos que todos los *ranks* estén seleccionados( se deberían de poner en color amarillo al pasar el mouse sobre la parte de interés).
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2017/03/26153207/WS3.png)
+
+### Paso 3
+
+Una vez realizada la selección, debemos copiar el *tag* correspondiente que se muestra en la caja situada abajo en el sitio web:
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2017/03/26153220/WS4.png)
+
+### Paso 4
+
+Con el *tag* copiado, podemos utilizar ese dato para realizar el scrapping con `rvest`.La función `html_nodes` encuentra todos los nodos o *tags* en la página que contengan el valor *text-primary*.
+
+```{r E1, exercise=T}
+
+#Usar el tag para extraer la información de rank
+rank_data_html <- html_nodes(webpage,'.text-primary')
+#Convertir los datos a texto
+rank_data <- html_text(rank_data_html)
+#Visualizar los resultados
+head(rank_data)
+
+
+```
+
+### Paso 5
+
+Preprocesamiento de los datos para que se encuentren en el tipo correcto. En este caso, el rank debe ser numérico:
+
+```{r E2, exercise=T}
+
+rank_data<-as.numeric(rank_data)
+head(rank_data)
+
+
+```
+
+### Paso 6
+
+Repetir el proceso con el siguiente campo de interés.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2017/03/26153235/WS5.png)
+
+```{r E3, exercise=T}
+
+#Usar el tag del título
+title_data_html <- html_nodes(webpage,'.lister-item-header a')
+title_data <- html_text(title_data_html)
+head(title_data)
+
+#Y ahora para los siguientes campos
+
+description_data_html <- html_nodes(webpage,'.ratings-bar+ .text-muted')
+description_data <- html_text(description_data_html)
+head(description_data)
+
+runtime_data_html <- html_nodes(webpage,'.text-muted .runtime')
+runtime_data <- html_text(runtime_data_html)
+head(runtime_data)
+
+
+```
+
+**Su turno:** Realizar el scrapping de *rating y realizar las conversiones correspondientes.*
+
+```{r E, exercise=TRUE}
+
+```
+
+```{r E-solution}
+
+rating_data_html <- html_nodes(webpage,'.ratings-imdb-rating strong')
+rating_data <- html_text(rating_data_html)
+head(rating_data)
+#Convertir a numérico
+rating_data<-as.numeric(rating_data)
+
+
+```
+
+## 4-2 Ejemplo reviews de Amazon
+
+Para obtener los reviews de los productos de amazon, primero debemos obtener el código [ASIN](https://www.amazon.com/gp/seller/asin-upc-isbn-info.html) del producto, ya que los url están formados por este código para cada producto.
+
+Por ejemplo, el url <https://www.amazon.com/dp/B01MYZ4OUW> nos llevará a la página del libro "Homo Deus", donde \*B01MYZ4OUW\* es el código ASIN.
+
+Vamos a utilizar la siguiente función para extraer varias características(título del producto,autor del review,título del review,estrellas,fecha y comentario), con el fin de poder analizar subsecuentemente estos datos.
+
+```{r E4,eval=F}
+
+scrape_amazon <- function(url, throttle = 0){
+  
+  # Install / Load relevant packages
+  if(!"pacman" %in% installed.packages()[,"Package"]) install.packages("pacman")
+  pacman::p_load(RCurl, XML, dplyr, stringr, rvest, purrr)
+  
+  # Set throttle between URL calls
+  sec = 0
+  if(throttle < 0) warning("throttle was less than 0: set to 0")
+  if(throttle > 0) sec = max(0, throttle + runif(1, -1, 1))
+  
+  # obtain HTML of URL
+  doc <- read_html(url)
+  
+  # # Parse relevant elements from HTML
+  # title <- doc %>%
+  #   html_nodes(".a-color-base") %>%
+  #   html_text() 
+  # title<- title[10:length(title)]
+  # 
+  author <- doc %>%
+    html_nodes(".a-profile-name") %>%
+    html_text()
+  
+  date <- doc %>%
+    html_nodes(".review-date") %>%
+    html_text() %>% 
+    gsub(".*on ", "", .)
+  
+  review_format <- doc %>% 
+    html_nodes(".review-format-strip") %>% 
+    html_text() 
+  
+  stars <- doc %>%
+    html_nodes(".review-rating") %>%
+    html_text() %>%
+    str_extract("\\d") %>%
+    as.numeric() 
+  
+  comments <- doc %>%
+    html_nodes(".review-text") %>%
+    html_text() 
+  
+  # Combine attributes into a single data frame
+  df <- data.frame(author, date, review_format, stars, comments, stringsAsFactors = F)
+  
+  return(df)
+}
+
+
+
+```
+
+Con esta función(ya está precargada en el tutorial), podemos extraer los datos mencionados.
+
+```{r E6,exercise=T}
+
+#Código del producto deseado
+prod_code <- "B01MYZ4OUW"
+
+url <- paste0("https://www.amazon.com/dp/", prod_code,"/?pageNumber=1")
+
+reviews <- scrape_amazon(url)
+
+# mostrar data
+str(reviews)
+
+```
+
+Como observamos en el anterior ejercicio, el url también esta compuesto por el elemento de *pageNumber*.Esto es debido a que por lo general cada página contiene 8 reviews.Por lo tanto, si deseamos extraer una mayor cantidad de reviews para el análisis, debemos modificar el proceso para extraer los datos en una manera iterativa:
+
+```{r E7,exercise=T}
+
+# Poner el número de páginas deseadas
+pages <- 5
+
+# Objeto vacio para guardar los datos
+reviews_all <- NULL
+
+# iterar sobre cada página
+
+prod_code <- "B01MYZ4OUW"
+url <- paste0("https://www.amazon.com/dp/", prod_code,"/?pageNumber=1")
+
+#obtener el nombre del producto y realizar una limpieza del mismo
+
+prod <- read_html(url) %>%
+  html_nodes( "#productTitle") %>% 
+  html_text() %>% 
+  gsub("\n", "", .) %>% 
+  trimws()
+
+prod
+
+for(page_num in 1:pages){
+  url <- paste0("http://www.amazon.com/dp/",
+                prod_code,
+                "/?pageNumber=",
+                page_num)
+  reviews <- scrape_amazon(url, throttle = 3)
+  reviews_all <- rbind(reviews_all, cbind(prod, reviews))
+}
+str(reviews_all)
+
+
+```
+
+Y voila , tenemos la data de las primeras 70 reviews del producto.
