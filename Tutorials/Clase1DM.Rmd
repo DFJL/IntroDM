@@ -20,6 +20,7 @@ library(purrr)
 library(learnr)
 library(knitr)
 library(lubridate)
+library(robotstxt)
 library(tidyverse)
 
 knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE,fig.width =10 , fig.height = 8)
@@ -380,3 +381,30 @@ str(reviews_all)
 ```
 
 Y voila , tenemos la data de las primeras 70 reviews del producto.
+
+## 4.3 Aspectos legales y éticos
+
+No podía ser tan bueno y fácil como parecía.Existen sitios web que no permiten el uso de motores de *scrapping* para la recolección de sus sitios web.Existe un archivo dentro de los sitios web llamado robots.txt que indica que páginas son permitadas y cuáles no.Si no se cumple y se hace caso omiso, se podría estar en un problema legal y/o ético.
+
+Por suerte, existe en R una [manera automática](https://github.com/ropensci/robotstxt) de chequear si es posible realizar el *scrapping* o no:
+
+```{r robots, exercise=T}
+
+library("robotstxt")
+
+paths_allowed(domain = "https://www.imdb.com",
+              path = "/search/title/?count=100&release_date=2020&title_type=feature",
+              , 
+  bot    = "*"
+)
+
+
+paths_allowed(domain = "https://www.amazon.com/dp/",
+              path = "B01MYZ4OUW", 
+              bot    = "*"
+)
+
+
+
+
+```
