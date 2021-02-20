@@ -408,3 +408,14 @@ paths_allowed(domain = "https://www.amazon.com/dp/",
 
 
 ```
+
+## Su Turno: Laboratorio Clase Grupal
+
+Para la página del ejercicio de amazon y apoyandose en el código trabajado en clase, realice lo siguiente:
+
+1.  Escoja un libro de su preferencia e investigue su código ASIN.
+2.  Ejecute el código para obtener el dataframe de reviews de al menos 5 páginas de amazon del libro escogido.
+3.  Una mediante una función de `dplyr` su dataframe y el de sus compañeros.
+4.  Analice la variable *stars* e indique cuál está mejor valorado mediante el cálculo de estadísticas descriptivas.
+5.  Cree un boxplot por libro de la variable *stars*.
+6.  Publique su reporte rmarkdown en Rpubs y envie el link al profesor.El reporte debe contener todo el código y resultados de los ejercicios.

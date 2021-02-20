@@ -1,5 +1,5 @@
   
-# TEC Introducción a Estadística <a href="url"><img src="https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png" align="right" width="30%"></a>
+# TEC Introducción a la Minería de Datos <a href="url"><img src="https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png" align="right" width="30%"></a>
 
 
 Este repositorio introDM contiene tutoriales y materiales para el curso de Minería de Datos del Técnico de Análisis de Datos del Instituto Tecnológico de Costa Rica.
