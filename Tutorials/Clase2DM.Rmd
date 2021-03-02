@@ -1,0 +1,319 @@
+---
+title: "Clase Minería de Datos 2: Text Mining"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+runtime: shiny_prerendered
+theme: united
+description: >
+  Clase 2 de introducción a Minería de datos.Incluye introducción al Text Mining, limpieza y transformación de datos.
+---
+
+```{r setup, include=FALSE}
+
+
+library(stringr) 
+library(tidytext)
+library(learnr)
+library(knitr)
+#library(janeaustenr)
+library(lubridate)
+library(tidyr)
+library(readr)
+library(dplyr)
+#library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE,fig.width =10 , fig.height = 8)
+tutorial_options(exercise.timelimit = 120)
+knit_hooks$set(optipng = hook_optipng)
+knit_hooks$set(pngquant = hook_pngquant)
+
+
+#Cargar data
+booksReviews<- read_delim("AmzReviews.csv",delim = ";")
+
+Clean_String <- function(string){
+    # minúscula
+    temp <- tolower(string)
+    # Remover todo lo que no sea número o letra 
+    temp <- stringr::str_replace_all(temp,"[^a-zA-Z\\s]", " ")
+    # remover espacios extra
+    temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+ 
+    return(temp)
+    
+}
+
+# Aplicar la función a los comentarios
+booksReviews$comments <- Clean_String(booksReviews$comments)
+
+
+# Convertir el texto en tokens
+
+booksReviewsT <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_tokens(input = comments,output = word)
+
+
+#se carga el dataset the stopwords
+data(stop_words)
+
+#se eliminan los stopwords
+
+tidyReviews <- booksReviewsT %>%
+  anti_join(stop_words)
+
+booksReviewsTN_2 <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_ngrams(input = comments,output = bigram,n=2)
+
+
+#Separar primero los bigrams
+booksReviewsTN_2_separated <- booksReviewsTN_2 %>%
+  separate(col = bigram, into = c("word1", "word2"), sep = " ")
+
+#Eliminar los que contengan stop words
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# Volver a juntar los bigramas que separamos
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_filtered %>%
+  unite(bigram, word1, word2, sep = " ")
+
+```
+
+![](https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png){width="289"}
+
+## 1- Text Mining
+
+Como ya introdujimos en la [lección anterior](https://dfjl1986.shinyapps.io/Clase1DM/), el *text mining* es el proceso por el cuál se descubren patrones ocultos e información valiosa y útil en formatos de datos de texto.Esta técnica transforma el texto en lenguaje natural (los distintos lenguajes humanos) en datos que las máquinas puedan entender y procesar automáticamente, para clasificar los textos por sentimiento, tópico o intención,etc.
+
+Gracias a estas técnicas, los negocios y organizaciones pueden analizar grandes y complejos conjubtos de datos de una forma simple y efectiva, reduciendo el esfuerzo tomado por tareas manuales.
+
+Algunos ejemplos de aplicaciones son:
+
+-   los temas que las personas están hablando en las redes sociales,
+
+-   cuáles términos o marcas están en tendencia,
+
+-   detección de noticias falsas,
+
+-   cuál es el sentimiento hacia un tópico en particular,
+
+-   cuál es la reputación de una marca,
+
+-   posibles situaciones de crisis para una empresa en particular por el filtrado de información en las redes sociales, ya sea verdadera o no.
+
+-   Análisis de satisfacción en tiquetes de soporte de una aplicación.
+
+-   Clasificación de tiquetes por temas (bugs, mejoras, quejas, etc).
+
+    El *text mining* combina partes de la estadística, la linguistica y el *machine learning* para crear modelos que aprendan de los datos existentes y puedan predecir o clasificar resultados de nuevos datos con una alta exactitud,
+
+## 2- Pasos en un análisis básico de *Text Mining*
+
+El primer paso como en todo análisis de datos es recolectar los datos en formato de texto que requieren ser analizados ( obviando para efectos de este tutorial el levantamiento de requerimientos de negocio).
+
+Los datos pueden ser internos (chats, emails,encuestas, hojas de cálculo, aplicaciones,etc) o externos ( redes sociales, blogs, noticias,artículos, libros,etc).
+
+Lo anterior lo cubrimos en la clase anterior con la temática del *web mining.*Toca entonces empezar a limpiar esos datos y eliminar todo lo que no vaya a ser útil para el análisis o genere ruido para los resultados.
+
+Acá es donde entra en juego el análisis del texto, por lo que a continuación repasaremos una serie de técnicas para dejar los datos lo más libre de impurezas posible.
+
+Para esto, vamos a utilizar un dataset en el que recojemos los reviews del libro *Sapiens: A brief History of Humankind* y otros 4 libros.
+
+### 2.1 Limpieza de datos
+
+Empezaremos con la lectura de los datos(Los datos fueron precargados para este tutorial):
+
+```{r E0,exercise=T}
+
+#Cargar data
+
+head(booksReviews)
+
+```
+
+Existen una serie de pasos básicos en el preprocesamiento que se deben realizar.A continuación una guía de los pasos que se pueden realizar(esto puede variar en cada caso de uso):
+
+-   Pasar a minúscula
+
+-   Remover símbolos
+
+-   Remover espacios extra
+
+```{r E1, exercise=T}
+
+# Se crea una función que realiza todo lo requerido
+
+Clean_String <- function(string){
+    # minúscula
+    temp <- tolower(string)
+    # Remover todo lo que no sea número o letra 
+    temp <- stringr::str_replace_all(temp,"[^a-zA-Z\\s]", " ")
+    # remover espacios extra
+    temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+ 
+    return(temp)
+    
+}
+
+# Aplicar la función a los comentarios
+booksReviews$comments <- Clean_String(booksReviews$comments)
+
+
+head(booksReviews$comments,10)
+
+```
+
+Otros elementos de limpieza que se pueden remover son el acento o remover texto en un idioma no requerido, entre otros.
+
+### *Tokenización*
+
+Usualmente, cuando trabajamos minería de texto, creamos unidades mínimas de texto llamados ***tokens***. Los tokens pueden ser sílabas, palabras o incluso frases que poseen valor analítico.El proceso de tokenización es el que nos permite pasar de texto no estructurado a texto estructurado.Para este proceso de tokenización , empezaremos a utilizar el paquete de R `tidytext` que contiene muchísimas facilidades para el ágil manejo de datos no estructurados en formato de texto, específicamente utilizando la función `unnest_tokens`
+
+```{r E2, exercise=T}
+
+library(tidytext)
+
+# Convertir el texto en tokens
+
+booksReviewsT <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_tokens(input = comments,output = word)
+
+# Agrupar por token para conteo de eventos
+booksReviewsT %>%
+  group_by(word,stars) %>%
+  summarise(count=n()) %>%
+  arrange(desc(count))
+
+```
+
+### *Stopwords*
+
+Notese que en el ejercicio anterior, al agrupar el conteo de los *tokens* y visualizar los que tienen mayor frecuencia, se evidencia que existen palabras de muy bajo valor analítico, pero que son usados con mucha frecuencia en un idioma en particular.
+
+Este tipo de palabras son llamadas *stopwords* que son palabras muy comunes en cada idioma pero que no aportan valor analítico en minería de texto.Usualmente estas palabras se eliminan para no crear ruido.El siguiente código ejemplifica como eliminar los *stops words*:
+
+```{r E3, exercise=T}
+
+#se carga el dataset the stopwords
+data(stop_words)
+
+sample_n(stop_words,10)
+
+#se eliminan los stopwords
+
+tidyReviews <- booksReviewsT %>%
+  anti_join(stop_words)
+
+# Agrupar por token para conteo de eventos
+tidyReviews %>%
+  group_by(word) %>%
+  summarise(count=n()) %>%
+  arrange(desc(count))
+
+
+```
+
+Podemos observar como el top de palabras varía completanmente a palabras más relevantes para el contexto a analizar.
+
+### 2.2 Transformación de datos
+
+#### *N- grams*
+
+Si bien es cierto en la sección anterior ya realizamos cierta transformación de datos con la tokenización ( esto debido a conveniencia para la limpieza de los datos y stopwords), existen ocasiones en donde los tokens solo de palabras no son suficientes o podemos crear mayor valor con combinaciones de palabras que aparecen muy frecuentemente en los documentos o textos.Lo anterior se conoce como ***N-Grams***.En el caso de las palabras, estamos trabajando con 1-gram.Si utilizamos la misma técnica pero para unir dos palabras, utilizaríamos 2-grams o bi-gram y así sucesivamente.Observemos como podemos lograr esto con `tidytext`:
+
+```{r E4,exercise=T}
+
+
+# Convertir el texto en bigramas
+
+booksReviewsTN_2 <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_ngrams(input = comments,output = bigram,n=2)
+
+
+# Agrupar por token para conteo de eventos
+booksReviewsTN_2 %>%
+  group_by(bigram) %>%
+  summarise(count=n()) %>%
+  arrange(desc(count))
+
+```
+
+Como sucedió anteriormente, existen muchos bigramas frecuentes que no nos interesan debido a los stopwords.Sin embargo, en este caso para removerlos, el procedimiento varía un poco:
+
+```{r E5,exercise=T}
+
+
+library(tidyr) # Se carga esta librería para usar funciones que nos ayuden a remover los stopwords
+
+#Separar primero los bigrams
+booksReviewsTN_2_separated <- booksReviewsTN_2 %>%
+  separate(col = bigram, into = c("word1", "word2"), sep = " ")
+
+head(booksReviewsTN_2_separated)
+
+#Eliminar los que contengan stop words
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# Volver a juntar los bigramas que separamos
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_filtered %>%
+  unite(bigram, word1, word2, sep = " ")
+
+# Nuevo conteo de frecuencia
+booksReviewsTN_2_filtered %>%
+  group_by(bigram,stars) %>%
+  summarise(count=n()) %>%
+  arrange(desc(count))
+
+```
+
+**Su turno:** Realizar el la transformación para un tri-grama y visualice el conteo de palabras, tal como lo hicimos para el bigrama.
+
+```{r E, exercise=TRUE}
+
+```
+
+```{r E-hint,eval=F}
+
+
+# Asi se realiza el análisis con un dataset del paquete janeaustenr(que contiene ejemplos de texto de libros)
+
+library(janeaustenr)
+austen_books() %>%
+  unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  separate(trigram, c("word1", "word2", "word3"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word) %>%
+  count(word1, word2, word3, sort = TRUE)
+
+```
+
+## Su Turno: Laboratorio Clase Grupal
+
+Para los datos recopilados por su grupo de reviews de amazon realice lo siguiente:
+
+1.  Cargue y limpie sus datos de acuerdo a lo revisado en el tutorial(para a variable de comentarios).Visualice los resultados.
+2.  Tokenice el dataframe resultante con un N-gram=1.Visualice los resultados.
+3.  Elimine los stopwords del resultado del ejercicio anterior.Visualice el conteo de mayor frecuencia de los resultados.
+4.  Tokenice el dataframe resultante con un bigrama.Visualice los resultados.
+5.  Elimine los stopwords del resultado del ejercicio anterior.Visualice el conteo de mayor frecuencia de los resultados(agrupado por bigram y stars).
+6.  Analice los resultados del ejercicio anterior.Que bigramas tienen mayor frecuencia?
+7.  Escoja dos bigramas de su preferencia para analizar y filtre el dataset solo por ese bigrama.Cuál es la frecuencia o conteo de esos bigramas según la variable stars?
+8.  Publique su reporte rmarkdown en Rpubs y envie el link al profesor.El reporte debe contener todo el código y resultados de los ejercicios.
