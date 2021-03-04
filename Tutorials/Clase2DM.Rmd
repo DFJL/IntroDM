@@ -4,6 +4,8 @@ output:
   learnr::tutorial:
     progressive: true
     allow_skip: true
+    includes:
+      in_header: google-analytics.html
 runtime: shiny_prerendered
 theme: united
 description: >

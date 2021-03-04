@@ -4,6 +4,8 @@ output:
   learnr::tutorial:
     progressive: true
     allow_skip: true
+    includes:
+      in_header: google-analytics.html
 runtime: shiny_prerendered
 theme: united
 description: >
@@ -20,6 +22,7 @@ library(purrr)
 library(learnr)
 library(knitr)
 library(lubridate)
+library(polite)
 library(robotstxt)
 library(tidyverse)
 
@@ -44,15 +47,16 @@ rank_data <- html_text(rank_data_html)
 head(rank_data)
 
 # Function to scrape elements from Amazon reviews
-scrape_amazon <- function(url, throttle = 0){
+scrape_amazon <- function(url, throttle = 5){
   
   # Set throttle between URL calls
   sec = 0
   if(throttle < 0) warning("throttle was less than 0: set to 0")
   if(throttle > 0) sec = max(0, throttle + runif(1, -1, 1))
   
+  session <- bow(url, force = TRUE)
   # obtain HTML of URL
-  doc <- read_html(url)
+  doc <- scrape(session)
   
   # # Parse relevant elements from HTML
   # title <- doc %>%
@@ -64,10 +68,14 @@ scrape_amazon <- function(url, throttle = 0){
     html_nodes(".a-profile-name") %>%
     html_text()
   
+  author <- author[-1:-2]
+  
   date <- doc %>%
     html_nodes(".review-date") %>%
     html_text() %>% 
     gsub(".*on ", "", .)
+  
+  date <- date[-1:-2]
   
   review_format <- doc %>% 
     html_nodes(".review-format-strip") %>% 
@@ -79,6 +87,8 @@ scrape_amazon <- function(url, throttle = 0){
     str_extract("\\d") %>%
     as.numeric() 
   
+  stars <- stars[-1:-2]
+  
   comments <- doc %>%
     html_nodes(".review-text") %>%
     html_text() 
@@ -88,6 +98,7 @@ scrape_amazon <- function(url, throttle = 0){
   
   return(df)
 }
+
 
 
 ```
@@ -273,34 +284,29 @@ Vamos a utilizar la siguiente función para extraer varias características(tít
 
 ```{r E4,eval=F}
 
-scrape_amazon <- function(url, throttle = 0){
-  
-  # Install / Load relevant packages
-  if(!"pacman" %in% installed.packages()[,"Package"]) install.packages("pacman")
-  pacman::p_load(RCurl, XML, dplyr, stringr, rvest, purrr)
+scrape_amazon <- function(url, throttle = 5){
   
   # Set throttle between URL calls
   sec = 0
   if(throttle < 0) warning("throttle was less than 0: set to 0")
   if(throttle > 0) sec = max(0, throttle + runif(1, -1, 1))
   
+  session <- bow(url, force = TRUE)
   # obtain HTML of URL
-  doc <- read_html(url)
+  doc <- scrape(session)
   
-  # # Parse relevant elements from HTML
-  # title <- doc %>%
-  #   html_nodes(".a-color-base") %>%
-  #   html_text() 
-  # title<- title[10:length(title)]
-  # 
   author <- doc %>%
     html_nodes(".a-profile-name") %>%
     html_text()
+  
+  author <- author[-1:-2]
   
   date <- doc %>%
     html_nodes(".review-date") %>%
     html_text() %>% 
     gsub(".*on ", "", .)
+  
+  date <- date[-1:-2]
   
   review_format <- doc %>% 
     html_nodes(".review-format-strip") %>% 
@@ -311,6 +317,8 @@ scrape_amazon <- function(url, throttle = 0){
     html_text() %>%
     str_extract("\\d") %>%
     as.numeric() 
+  
+  stars <- stars[-1:-2]
   
   comments <- doc %>%
     html_nodes(".review-text") %>%
@@ -323,7 +331,6 @@ scrape_amazon <- function(url, throttle = 0){
 }
 
 
-
 ```
 
 Con esta función(ya está precargada en el tutorial), podemos extraer los datos mencionados.
@@ -331,9 +338,14 @@ Con esta función(ya está precargada en el tutorial), podemos extraer los datos
 ```{r E6,exercise=T}
 
 #Código del producto deseado
-prod_code <- "B01MYZ4OUW"
+prod_code <- "0393609391"
+page_num <- 1
 
-url <- paste0("https://www.amazon.com/dp/", prod_code,"/?pageNumber=1")
+url <- paste0("https://www.amazon.com/product-reviews/",
+              prod_code,"/ref=cm_cr_arp_d_paging_btm_next_",
+              page_num,
+              "?ie=UTF8&reviewerType=all_reviews&pageNumber=",
+              page_num)
 
 reviews <- scrape_amazon(url)
 
@@ -342,7 +354,7 @@ str(reviews)
 
 ```
 
-Como observamos en el anterior ejercicio, el url también esta compuesto por el elemento de *pageNumber*.Esto es debido a que por lo general cada página contiene 8 reviews.Por lo tanto, si deseamos extraer una mayor cantidad de reviews para el análisis, debemos modificar el proceso para extraer los datos en una manera iterativa:
+Como observamos en el anterior ejercicio, el url también esta compuesto por el parámetro de *pageNumber*.Esto es debido a que por lo general cada página contiene 8 reviews.Por lo tanto, si deseamos extraer una mayor cantidad de reviews para el análisis, debemos modificar el proceso para extraer los datos en una manera iterativa:
 
 ```{r E7,exercise=T}
 
@@ -355,23 +367,34 @@ reviews_all <- NULL
 # iterar sobre cada página
 
 prod_code <- "B01MYZ4OUW"
-url <- paste0("https://www.amazon.com/dp/", prod_code,"/?pageNumber=1")
+page_num <- 1
+
+url <- paste0("https://www.amazon.com/product-reviews/",
+              prod_code,"/ref=cm_cr_arp_d_paging_btm_next_",
+              page_num,
+              "?ie=UTF8&reviewerType=all_reviews&pageNumber=",
+              page_num)
+
+# Inicializar una sesión en el sitio para realizar el scrapping responsablemente
+
+session <- bow(url, force = TRUE)
 
 #obtener el nombre del producto y realizar una limpieza del mismo
 
-prod <- read_html(url) %>%
-  html_nodes( "#productTitle") %>% 
-  html_text() %>% 
-  gsub("\n", "", .) %>% 
-  trimws()
-
-prod
+prod <- scrape(session) %>%
+    html_nodes( "a.a-link-normal") %>% 
+    html_text() %>% 
+    gsub("\n", "", .) %>% 
+    trimws()
+  
+prod<- prod[1]
 
 for(page_num in 1:pages){
-  url <- paste0("http://www.amazon.com/dp/",
-                prod_code,
-                "/?pageNumber=",
-                page_num)
+url <- paste0("https://www.amazon.com/product-reviews/",
+              prod_code,"/ref=cm_cr_arp_d_paging_btm_next_",
+              page_num,
+              "?ie=UTF8&reviewerType=all_reviews&pageNumber=",
+              page_num)
   reviews <- scrape_amazon(url, throttle = 3)
   reviews_all <- rbind(reviews_all, cbind(prod, reviews))
 }
