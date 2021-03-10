@@ -1,0 +1,299 @@
+---
+title: "Clase Minería de Datos 3: Text Mining(Processing)"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+    includes:
+      in_header: google-analytics.html
+runtime: shiny_prerendered
+theme: united
+description: >
+  Clase 3 de introducción a Minería de datos.Incluye la transformación de datos no estructurados a datos estructurados con la métrica Tf-Idf.
+---
+
+```{r setup, include=FALSE}
+
+library(tidytext)
+library(learnr)
+library(knitr)
+library(tidyr)
+library(readr)
+library(wordcloud)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE,fig.width =10 , fig.height = 8)
+tutorial_options(exercise.timelimit = 120)
+knit_hooks$set(optipng = hook_optipng)
+knit_hooks$set(pngquant = hook_pngquant)
+
+#Cargar data
+booksReviews<- read_delim("AmzReviews.csv",delim = ";")
+
+Clean_String <- function(string){
+    # minúscula
+    temp <- tolower(string)
+    # Remover todo lo que no sea número o letra 
+    temp <- stringr::str_replace_all(temp,"[^a-zA-Z\\s]", " ")
+    # remover espacios extra
+    temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+ 
+    return(temp)
+    
+}
+
+# Aplicar la función a los comentarios
+booksReviews$comments <- Clean_String(booksReviews$comments)
+
+
+# Convertir el texto en tokens
+
+booksReviewsT <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_tokens(input = comments,output = word)
+
+
+#se carga el dataset the stopwords
+data(stop_words)
+
+#se eliminan los stopwords
+
+tidyReviews <- booksReviewsT %>%
+  anti_join(stop_words)
+
+booksReviewsTN_2 <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_ngrams(input = comments,output = bigram,n=2,n_min = 1)
+
+
+#Separar primero los bigrams
+booksReviewsTN_2_separated <- booksReviewsTN_2 %>%
+  separate(col = bigram, into = c("word1", "word2"), sep = " ")
+
+#Eliminar los que contengan stop words
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# Volver a juntar los bigramas que separamos
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_filtered %>%
+  mutate(word2=ifelse(is.na(word2)==T," ",word2)) %>%
+  unite(bigram, word1, word2, sep = " ")
+
+tidyReviewsCounts <- booksReviewsTN_2_filtered %>%
+  count(id, bigram, sort = TRUE)
+
+tidyReviewsTFIDF <- tidyReviewsCounts %>%
+  bind_tf_idf(bigram,id, n) %>%
+  arrange(desc(tf_idf))
+
+
+```
+
+![](https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png){width="289"}
+
+## Transformación de datos de texto(Continuación)
+
+En la lección anterior, analizamos como por medio de la *tokenización* y los *n-gramas* podemos empezar a cuantificar la frecuencia de términos importantes en los datos a analizar.Si bien es cierto el conteo y frecuencia es un primer buen acercamiento, esta métrica debe ser complementada para poder medir de una manera más adecuada la importancia de un término a través de los textos analizados.
+
+## Tf-Idf (Term Frecuencia-Inverse Document Frecuency)
+
+Acá es donde nace la métrica Tf-Idf.esta métrica es una medida de la "originalidad" de un término o token comparando el número de ocasiones en que el término aparece en un documento en particular y el inverso número de documentos en el que el término aparece. Para esto, se combinan dos métricas:
+
+![](https://miro.medium.com/max/875/1*Ls99vVqLpamS46Xx3KmzOA.png)
+
+-   **Tf: Term Frecuency:** Número de ocasiones que el término ocurre en un documento.
+
+    ![](https://miro.medium.com/max/875/1*i3zeV4ktW1TmI3xInrZEAw.png){width="500" height="57"}
+
+    Por ejemplo, en el documento " Amo el aguacate y el aguacate me ama a mi" la palabra aguacate tiene un Tf de 1(el máximo valor posible) ya que tiene 2 ocurrencias y es la palabra con mayor número de ocurrencias (2/2).
+
+-   **Idf: Inverse Document Frecuency:** Mide que tan importante una palabra es en el conjunto de documentos.Si una palabra aparece frecuentemente en un documento, es un indicador de su importancia relativa en ese documento.Pero si ese mismo término aparece frecuentemente en muchos otros documentos, es un indicador de que este término es compun y no está ayudando a discriminar(por ejemplo los stopwords).
+
+    ![](https://miro.medium.com/max/875/1*__qYqyBtilnM-nT5QRJErA.png){width="491"}
+
+**Ejemplo**
+
+![](https://miro.medium.com/max/875/1*-ZwpWHP93vNYbllThuAe8g.png)
+
+Podemos ver en la métrica Tf-Idf que solamente las palabras relevantes para cada documento reciben un valor mayor, mientras que las que no existen en el documento o son poco relevantes(como las *stop words*) tienen valores cercanos a cero.
+
+![](https://miro.medium.com/max/875/1*ILOJ2HGT4SqU-wEF64aa3A.png "Ejemplo de la Influencia de la métrica Tf-Idf")
+
+Esta métrica es utilizada ampliamente en aplicaciones de *machine learning* ya que ayuda a discriminar cuáles términos son mas relevantes para cada categoría a clasificar.Por ejemplo, en una aplicación de detección de spam, tendríamos dos categorías:Spam y no spam.Los documentos clasificados como spam, probablemente tendrían una amplia utilización de palabras características como premios, ganador, pornografía, etc.Por lo consiguiente, esta métrica podría utilizarse para identificar cada una de las categorpias y poder predecir documentos nuevos en spam/no spam.
+
+Por último, esta métrica es ampliamente utilizada en motores de búsqueda de la herramienta *elastic search* que trabaja como el back end de Ebay, mercado libre, etc.
+
+Ahora bien, una vez conocida la parte teórica, vamos a utilizar el paquete `tidytext` para calcular esta métrica de manera sencilla.Para esto, vamos a utilizar el mismo dataset de reviews de libros de Amazon que hemos venido trabajando de los tutoriales anteriores.
+
+Vamos a arrancar con el dataset del ejercicio anterior en el que ya habíamos aplicado la limpieza de datos, removido *stop words* y transformado a bigramas:
+
+```{r E0,exercise=T}
+
+#Cargar data
+
+head(booksReviewsTN_2_filtered)
+
+tidyReviewsCounts <- booksReviewsTN_2_filtered %>%
+  count(id, bigram, sort = TRUE)
+
+head(tidyReviewsCounts)
+
+```
+
+Una vez con el `dataframe` que contiene los conteos por cada uno de los documentos(*reviews*) por cada bigrama, podemos utilizar la función `bind_tf_idf` para generar la métrica:
+
+```{r E1, exercise=T}
+
+tidyReviewsTFIDF <- tidyReviewsCounts %>%
+  bind_tf_idf(bigram,id, n) %>%
+  arrange(desc(tf_idf))
+
+#Unimos de nuevo con el dataframe original para obtener la variable stars
+
+head(tidyReviewsTFIDF)
+
+```
+
+## Visualizando los resultados
+
+Una vez tenemos la métrica Tf-Idf, podemos realizar algunas visualizaciones para entender los resultados generados.Vamos a visualizar por la variable *stars* las palabras más importantes según la Tf-Idf, esto con el objetivo de analizar la creación de un modelo predictivo que estime si un libro en particular va a ser bien o mal evaluado por sus lectores.
+
+```{r E2, exercise=T}
+
+#Unimos de nuevo con el dataframe original para obtener la variable stars
+
+tidyReviewsFinal <- tidyReviewsTFIDF %>%
+  left_join(booksReviewsTN_2_filtered) 
+
+head(tidyReviewsFinal)
+
+# Gráfico de barras para cada valor de stars
+tidyReviewsFinal %>%
+  group_by(stars) %>%
+  slice_max(tf_idf, n = 10) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, forcats::fct_reorder(bigram, tf_idf), fill = stars)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~stars, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL)+
+  theme_minimal()
+
+
+```
+
+### *WordClouds*
+
+Los *wordclouds* son visualizaciones especiales que ayudan a identificar de una manera rápida, cuáles son los términos más relevantes en el conjunto de datos.Utilizaremos la librería `wordcloud` para crear esta visualización:
+
+```{r E3, exercise=T}
+tidyReviewsFinal <- tidyReviewsTFIDF %>%
+  left_join(booksReviewsTN_2_filtered) 
+
+# Wordcloud de reviews "malos"
+tidyReviewsFinal %>%
+  filter(stars<=3) %>%
+  group_by(bigram,stars) %>%
+  summarise(tf_idf=mean(tf_idf)) %>%
+  reshape2::acast(bigram ~ stars, value.var = "tf_idf", fill = 0) %>%
+  wordcloud::comparison.cloud(scale=c(3,.9),max.words = 50)
+
+```
+
+**Su turno:** Grafique el wordcloud del Tf-Idf para los reviews de 4 y 5 estrellas.
+
+```{r E, exercise=TRUE}
+
+```
+
+## Su Turno: Laboratorio Clase Grupal
+
+Para los datos recopilados por su grupo de reviews de amazon realice lo siguiente:
+
+1.  Cargue y limpie sus datos de acuerdo a lo revisado en el tutorial(para la variable de comentarios).
+
+2.  Tokenice el dataframe resultante con un N-gram=1 a 2 eliminando los stopwords (para esto utilice en la función `unnested_ngrams` la siguiente guía:
+
+    `unnest_ngrams(input = comments,output = bigram,n=2,n_min = 1)`
+
+3.  Genere la métrica Tf-Idf para los resultados del ejercicio anterior.
+
+4.  Genere un wordcloud del Tf-Idf para la variable *stars*==1 y *stars*==5, es decir, los reviews peor y mejor calificados.Analice los resultados.
+
+5.  Publique su reporte rmarkdown en Rpubs y envie el link al profesor.El reporte debe contener todo el código y resultados de los ejercicios.
+
+**Nota**: Puede utilizar la siguiente guía para generar el proceso completo(hasta el ejercicio 3).
+
+```{r example,eval=FALSE}
+
+#Cargar data
+booksReviews<- read_delim("AmzReviews.csv",delim = ";")
+
+Clean_String <- function(string){
+    # minúscula
+    temp <- tolower(string)
+    # Remover todo lo que no sea número o letra 
+    temp <- stringr::str_replace_all(temp,"[^a-zA-Z\\s]", " ")
+    # remover espacios extra
+    temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+ 
+    return(temp)
+    
+}
+
+# Aplicar la función a los comentarios
+booksReviews$comments <- Clean_String(booksReviews$comments)
+
+
+# Convertir el texto en tokens
+
+booksReviewsT <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_tokens(input = comments,output = word)
+
+
+#se carga el dataset the stopwords
+data(stop_words)
+
+#se eliminan los stopwords
+
+tidyReviews <- booksReviewsT %>%
+  anti_join(stop_words)
+
+booksReviewsTN_2 <- booksReviews %>%
+  mutate(id=paste(prod,author,date,sep="-")) %>%
+  select(id,stars,comments) %>%
+  unnest_ngrams(input = comments,output = bigram,n=2,n_min = 1)
+
+
+#Separar primero los bigrams
+booksReviewsTN_2_separated <- booksReviewsTN_2 %>%
+  separate(col = bigram, into = c("word1", "word2"), sep = " ")
+
+#Eliminar los que contengan stop words
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# Volver a juntar los bigramas que separamos
+
+booksReviewsTN_2_filtered <- booksReviewsTN_2_filtered %>%
+  mutate(word2=ifelse(is.na(word2)==T," ",word2)) %>%
+  unite(bigram, word1, word2, sep = " ")
+
+tidyReviewsCounts <- booksReviewsTN_2_filtered %>%
+  count(id, bigram, sort = TRUE)
+
+tidyReviewsTFIDF <- tidyReviewsCounts %>%
+  bind_tf_idf(bigram,id, n) %>%
+  arrange(desc(tf_idf))
+
+```
