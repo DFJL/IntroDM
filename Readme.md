@@ -8,15 +8,15 @@ En dichos tutoriales, podrá comprender los temas de Minería de Datos básicos 
 
 A este momento, el repositorio contiene 5 tutoriales con la siguiente temática:
 
-| Totorial | Contenido                                                    | Link ShinyApps                                                                                                      |
+| Tutorial | Contenido                                                    | Link ShinyApps                                                                                                      |
 |----------|--------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
 | Clase 1  | Introducción a Minería de Datos. Web Mining y Web Scrapping. | [Clase 1](https://dfjl1986.shinyapps.io/Clase1DM") |
 | Clase 2  | Text Mining y Procesamiento del Lenguaje Natural             | [Clase 2](https://dfjl1986.shinyapps.io/ClaseDM2/)                                                                                                                |
 | Clase 3  | Text Mining.Métrica Tf-Idf                 | [Clase 3 ](https://dfjl1986.shinyapps.io/Clase3DM/)                                                                                                                |
 | Clase 4  | Modelos Supervisados:Clasificación de textos  | [Clase 4](https://dfjl1986.shinyapps.io/Clase4DM/)                                                                                                               |
-| Clase 5  | Mejorar modelos Supervisados              | [Clase 5](https://dfjl1986.shinyapps.io/ClaseDataMining5/)                                                
-                                                        |
-| Clase 6  | Modelos No Supervisados              | [Clase 6](https://dfjl1986.shinyapps.io/ClaseDataMining6/)                                                                                                                |
+| Clase 5  | Mejorar modelos Supervisados              | [Clase 5](https://dfjl1986.shinyapps.io/ClaseDataMining5/)     |
+| Clase 6  | Modelos No Supervisados              | [Clase 6](https://dfjl1986.shinyapps.io/ClaseDataMining6/)  |                                        
+                                                                                                                                                                    
 
 ## Instalación
 
