@@ -1,0 +1,409 @@
+---
+title: "Clase Minería de Datos 4: Introducción a los Modelos Supervisados"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+    includes:
+      in_header: google-analytics.html
+runtime: shiny_prerendered
+theme: united
+description: >
+  Clase 4 de introducción a Minería de datos.Incluye temas de modelos supervisados para la clasificación de textos .
+---
+
+```{r setup, include=FALSE}
+
+
+library(learnr)
+library(knitr)
+library(ggplot2)
+library(reshape2)
+library(forcats)
+library(stringr)
+library(dplyr)
+library(tidymodels)
+library(textrecipes)
+library(stopwords)
+library(themis)
+
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE,fig.width =8 , fig.height = 8)
+tutorial_options(exercise.timelimit = 120)
+knit_hooks$set(optipng = hook_optipng)
+knit_hooks$set(pngquant = hook_pngquant)
+
+#Load all the needed objects to run tutorial
+load("T5Data.RData")
+
+
+```
+
+![](https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png){width="289"}
+
+## Modelos Supervisados:Clasificación
+
+En las lecciones anteriores hemos venido trabajando en cada una de las etapas técnicas que involucra un proyecto de Minería de datos: recoleción de datos, limpieza y transformación de datos.Todas estas etapas son fundamentales para la creación de modelos de *Machine Learning* para tareas ya sea del tipo Supervisado o No Supervisado.
+
+![Intro a Modelos de Clasificación](https://www.youtube.com/watch?v=8TuRJg76sW8)
+
+![Diagrama de Proceso de un modelo de Machine Learning](http://www.sharetechnote.com/html/NN/image/NN_HowToLearn_01.png "Diagrama de Proceso de un modelo de Machine Learning")
+
+En este tutorial vamos a aprovechar todo el camino recorrido para clasificar los reviews de los libros de amazon y poder identificar mediante sus características(llamadas variables predictoras), si un libro en particular va a ser bien calificado o por el contrario va a ser mal calificado(variable a predecir).
+
+Por lo anterior debemos crear un dataset del cuál el algoritmo de *machine learning* pueda aprender de los patrones que se encuentran en los datos y permita identificar las características que logran discriminar entre una categoría y otra de la variable a predecir.
+
+![Ejemplo de la relación entre variable a predecir y variables predictoras](https://miro.medium.com/max/960/1*pQOmuWjgevfagaHqGh6HXA.png)
+
+En la anterior imagen, se desea predecir si un individuo en particular es masculino o femenino basado solamente en la altura y el peso.Como se logra observar en este sencillo ejemplo, la línea azul punteada logra dividir o discriminar entre ambas categorías y por lo tanto con los valores de peso y altura se podría clasificar el género de una persona que no se encuentra en el dataset original con alta precisión.
+
+Dicha línea azul punteada corresponde al ajuste de algún algoritmo de *Machine Learning* a los datos.Estos algoritmos tienen **parámetros que deben ser aprendidos de los datos,** para posteriormente utilizar una ecuación, fórmula o esquema con el que teniendo un conjunto de datos nuevos, podamos pasar los valores de los datos nuevos por dicha ecuación y obtengamos una predicción.
+
+## Datos de entrenamiento y validación
+
+El dataset recopilado debe al menos ser dividido en dos datasets:
+
+-   **Dataset de entrenamiento:** Este dataset es el que se va a utilizar para que los algoritmos de machine learning aprendan de los datos y generen una ecuación que nos permita clasificar nuevos datos.
+
+-   **Dataset de Validación:** Este dataset es en el que usualmente se utilizan las predicciones del dataset de entrenamiento y poder perfeccionar los parámetros de los algoritmos utilizados.
+
+-   **Dataset de Prueba:** Este es un dataset independiente que se utiliza para medir los resultados finales y evaluar el rendimiento del modelo de acuerdo a ciertas métricas de éxito.
+
+    ![Ejemplo de partición de datos para Machine Learning](https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/ML_dataset_training_validation_test_sets.png/330px-ML_dataset_training_validation_test_sets.png "Ejemplo de partición de datos para Machine Learning")
+
+En este tutorial solamente vamos a utilizar el caso A.Existen otras metodologías como la llamada Validación Cruzada, que consiste en subdividir el dataset de entrenamiento en varios subconjuntos aleatorios K para correr el algoritmo distintas ocasiones y generar una mayor variabilidad y reducción del error del algoritmo.
+
+[![](https://miro.medium.com/max/601/1*PdwlCactbJf8F8C7sP-3gw.png)](Ejemplo%20de%20Validación%20Cruzada)
+
+Entonces, nuestro primer paso va a ser dividir el dataset en la muestra de entrenamiento y la muestra de prueba.
+
+```{r E0,exercise=T}
+
+library(tidymodels)
+
+set.seed(1234) # Asegurar siempre una misma semilla aleatoria.
+
+#Reclasificar las 5 categorías de stars en 2 categorías
+#booksReviews ya tiene el proceso de limpieza de datos
+
+reviewClass <- booksReviews %>%
+  mutate(class = factor(if_else(stars <= 3,"Not Great", "Great")
+                        )
+         )
+
+#Realizar la partición de las muestras
+
+reviews_split <- initial_split(reviewClass,prop=.7)
+
+reviews_train <- training(reviews_split)
+reviews_test <- testing(reviews_split)
+
+dim(reviews_train);dim(reviews_test)
+
+```
+
+Podemos ver como el set de entrenamiento es 70% de los datos y el de prueba el restante 30%.
+
+## Receta de preprocesamiento de datos
+
+Ahora, para esa separación de datos, utilizamos el dataset original sin ningún paso de limpieza y preprocesamiento. Vamos a resumir todos los pasos de procesamiento de texto, con el paquete `textrecipes` este es un enfoque diferente al que hemos venido siguiendo, pero más automatizado y ajustado para modelos de machine learning, en el cuál se van agregando pasos a una "receta" de procesamiento de datos:
+
+```{r E1, exercise=T}
+
+library(textrecipes)
+library(stopwords)
+
+# Setear la receta del modelo a utilizar
+
+reviews_recipe <- recipe(class ~ comments, 
+                         data = reviews_train)
+
+#Aplicar los pasos de procesamiento de datos
+
+reviews_recipeProcessed <- reviews_recipe %>%
+  step_tokenize(comments) %>%
+  step_stopwords(comments, keep = FALSE) %>%
+  step_untokenize(comments) %>%
+  step_tokenize(comments, token = "ngrams", 
+                options = list(n = 2, n_min = 1)) %>%
+  step_tokenfilter(comments, max_tokens = 500) %>%
+  step_tfidf(comments)
+
+#Ejecutar la receta del paso anterior
+reviews_recipeProcessedF <- prep(reviews_recipeProcessed)
+
+reviews_recipeProcessedF
+
+#Setear el workflow para trabajar el modelo de Machine Learning
+
+reviews_wf <- workflow() %>%
+  add_recipe(reviews_recipeProcessed)
+
+```
+
+## Balanceo de Clases
+
+Existen algunos problemas de clasificación en donde las clases o categorías no se encuentran balanceadas, esto es, que en la práctica una categoría es mucho más frecuente que otra.Por ejemplo, en un problema de clasificación de fraudes, más del 99% de los casos caen en la categoría "No fraude" y el restante 1% en la categoría "Fraude.
+
+Cuando esto sucede, los algoritmos de clasificación usualmente no se comportan bien y no logran identificar adecuadamente la categoría pequeña.
+
+![Ejemplos del problema de balance de clases](https://miro.medium.com/max/563/1*zsyN08VVrgHbAEdvv27Pyw.png)
+
+Por dicho motivo, si tenemos este problema, debemos de realizar alguna técnica de muestreo de los datos de entrenamiento, para que las clases sean lo más balanceadas posibles.
+
+En este caso, lo hacemos mediante el algoritmo **SMOTE**(*Synthetic Minority Over-sampling Technique*) que realiza un "sobre muestreo" de la clase más pequeña, creando datos sintéticos que emulen las características de la clase monoritaria.
+
+Para aplicar la técnica a nuestros datos, solamente debemos añadir un paso nuevo a muestra receta( **solamente en caso de que nuestros datos sean no balanceados**) usando la función `step_smote` de la librería `themis`:
+
+```{r E1b, exercise=TRUE}
+
+library(themis)
+
+#Verificamos las frecuencias de nuestro dataframe
+
+reviews_train %>%
+  group_by(class) %>%
+  summarise(n=n()) %>%
+  mutate(freq = prop.table(n))
+
+# Si es requerido se utiliza la función step_smote sobre la receta que ya se había creado
+
+
+reviews_recipeProcessed2 <- reviews_recipeProcessed %>%
+  step_smote(class)
+
+#Ejecutar la receta del paso anterior
+reviews_recipeProcessedF2 <- prep(reviews_recipeProcessed2)
+
+reviews_recipeProcessedF2
+
+#Setear el workflow para trabajar el modelo de Machine Learning
+
+reviews_wf2 <- workflow() %>%
+  add_recipe(reviews_recipeProcessed2)
+
+
+```
+
+## Algoritmos de Clasificación
+
+### Regresión Logística
+
+La regresión logística es la técnica usada por excelencia cuando requerimos predecir o clasificar una variable *x* de naturaleza binaria (por ejemplo Tener COVID/No tener COVID) por medio de una o varias variables predictoras *Y*.Se utiliza por lo general como modelo base para comparar o realizar un *benchmark* con otros algoritmos de clasificación.
+
+En el curso de Introducción a Estadística, analizamos la Regresión lineal Simple, en donde la variable a predecir x, debe ser de naturaleza continua.
+
+Consideremos un ejemplo con tarjetas de crédito, en el que deseamos conocer por medio de la variable Balance del cliente (variable predictora Y) si el cliente puede caer en default o no (Variable a predecir x).Para este tipo de problemas, esta variable usualmente se codifica en el dataset con valores de 0-1 ( 0=No default, 1= Default).
+
+Para efectos prácticos, este modelo lo podríamos generar con una regresión lineal simple, pero el ajuste del modelo no sería del todo bueno:
+
+![](https://bradleyboehmke.github.io/HOML/05-logistic-regression_files/figure-html/whylogit-1.png "Ejemplo de Regresión Lineal vrs Regresión Logística"){width="791"}
+
+Al observar los scatterplots de cada modelo, podemos encontrar que el ajuste del modelo para valores bajos de Balance registrarán una probabilidad negativa( lo cuál no es ni posible ni lógico) y valores altos de Balance una probabilidad muy alejada de los valores reales.A la derecha podemos contrastar el ajuste de una regresión logística, cuya forma es sigmoidal y cuyo ajuste es mucho mas acercado a la realidad.Notese también que conforme las observaciones se enceuntran en los extremos de la variable Balance, el ajuste es mas preciso, pero la incertidumbre aumenta en ciertos rangos en donde la probabilidad para ambas categorías es cercana a 0.5, es decir, como tirar una moneda y escoger una de las dos caras.
+
+#### Parámetros de un Modelo de Regresión Logística
+
+Un modelo de regresión logística tiene 2 parámetros básicos que deben ser aprendidos de los datos:
+
+$\begin{equation}\tag{Función Logística} p\left(X\right) = \frac{e^{\beta_0 + \beta_1X}}{1 + e^{\beta_0 + \beta_1X}}\end{equation}$
+
+El primer parámetro $\beta_0$ corresponde al intercepto o "sesgo" y es una constante para toda la ecuación.El parámetro $\beta_1$ es el coeficiente que indica la relación que existe entre cada variable predictora Y y la variable a predecir x.
+
+#### Ejecutar el modelo de Regresión Logística en R
+
+Volviendo a los datos de los reviews de amazon, vamos a ejecutar una regresión Logística donde la variable a predecir x es si el review es Positivo ( *Stars*\>4) o es Negativo ( *Stars* \<=3) y las variables a de predecir son los distintos tokens creados y cuantofocados mediante la métrica Tf-Idf.
+
+Una vez creada la receta con el paquete `textrecipes`, podemos empezar a preparar el modelo de *machine learning* con la función `workflow:`
+
+```{r E2, exercise=T}
+
+#Setear el workflow para trabajar el modelo de Machine Learning
+
+reviews_wf2 <- workflow() %>%
+  add_recipe(reviews_recipeProcessed2)
+
+# Especificación del modelo
+
+rl_spec <- logistic_reg() %>% 
+  set_engine("glm")
+
+rl_spec
+
+#Ajustar el modelo con los datos
+
+rl_fit <- reviews_wf2 %>%
+  add_model(rl_spec) %>%
+  fit(data = reviews_train)
+
+rl_fit
+
+```
+
+### Evaluar la calidad del modelo
+
+Una vez creado el modelo inicial, debemos evaluar la calidad del mismo, en función de métricas que nos indiquen que tan bueno es el mismo prediciendo la variable x ( Review Positivo o Negativo).
+
+La escogencia de estas métricas varían en función del tipo de variable ( modelos de clasificación o regresión) y también en función del objetivo que se busca.
+
+#### Matriz de Confusión
+
+En modelos de clasificación, la primera métrica a calcular debería ser la matriz de confusión.Esta matriz indica el grado de relación entre los valores observados y los valores predichos, cruzando para cada categoría de la variable x.Una manera adecuada de realizar estos cálculos, es mediante la utilización de el remuestreo de la validación cruzada, como analizamos en la sección anterior.De esta manera, la métrica se calculará en cada submuestra de entrenamiento o *fold* obteniendo mayor fiabilidad en los resultados.La siguiente ilustración ejemplifica lo mencionado:
+
+![](https://rviews.rstudio.com/2020/04/21/the-case-for-tidymodels/resampling.svg)
+
+Para calcular la matriz de confusion en R mediante el enfoque de `tidymodels` se sigue la siguiente instrucción:
+
+```{r E3, exercise=T}
+
+#Se setea una semilla aleatoria para evitar diferentes resultados cada corrida
+set.seed(234)
+
+# Se genera las submuestras de validación cruzada
+
+reviews_folds <- vfold_cv(reviews_train,v=5)
+
+reviews_folds
+
+# Se ajusta el modelo para cada fold
+
+rl_rs <- fit_resamples(rl_fit,
+                       reviews_folds,
+                       control = control_resamples(save_pred = TRUE),
+                       metrics = metric_set(f_meas,recall,precision)
+                       )
+
+# Se calcula la matriz de confusión
+
+rl_rs %>% conf_mat_resampled(tidy = F)
+
+
+```
+
+Para interpretar la matriz de confusión debemos poner atención a las coincidencias en las diagonales.Las casillas en la que coinciden las categorías indica el valor total en el que el modelo acertó en cada submuestra.
+
+#### Recall y Precisión
+
+Si bien es cierto la matriz de confusión brinda un primer acercamiento, existen otras métricas que brindan un mayor grado de detalle en función del objetivo que se busque.
+
+-   **Recall:**Esta métrica responde a la pregunta ¿Cuántos documentos relevantes (Reviews Positivos) son seleccionados? Es decir, de todos los Reviews Positivos,que proporción fue clasificada como Review Positivo por el modelo. Este indicador mide que tan efectivo es el modelo para captar todos los reviews positivos.
+
+-   **Precisión:** Esta métrica responde a la pregunta ¿De los documentos clasificados como Reviews Positivos por el Modelo, cuántos eran realmente reviews Positivos? Este indicador mide la proporción de documentos que serán realmente reviews Positivos en una futura implementación y el remanente serán falsos positivos.
+
+-   **F1-Score:** El score F1 es una métrica que pondera las dos métricas anteriores y se puede utilizar para la escogencia del mejor modelo.
+
+    ![](https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Precisionrecall.svg/1200px-Precisionrecall.svg.png){width="368"}
+
+Podemos ver el siguiente ejemplo con una aplicación de detección de cáncer, en donde amarramos los anteriores conceptos con la matriz de confusión:
+
+![TP= True Positives, TN=True Negatives,FP=False Positives,FN=False Negatives](https://qph.fs.quoracdn.net/main-qimg-18cd74b05b850406e1c01b76b1cb8fd6.webp)
+
+En R y tidymodels, se sigue la siguiente instrucción:
+
+```{r E4, exercise=TRUE}
+
+rl_rs %>% collect_metrics()
+
+```
+
+### Cálculo de Predicciones
+
+Una vez creado el modelo, podemos proceder a calcular las predicciones para cada observación, para especificar a nivel individual si el modelo acertó o no, para esto se puede utilizar la función `collect_predictions()`
+
+```{r E5,exercise=T}
+
+rl_rs %>% collect_predictions() %>% head()
+
+```
+
+### Evaluar resultados en datos de prueba
+
+Todo lo anterior lo hemos realizado en el conjunto de datos de entrenamiento.Sin embargo, debemos realizar las pruebas finales en el conjunto de datos de Prueba.Para esto, podemos utilizar la función `last_fit()`, que ajusta en en el dataset de entrenamiento y evalúa en el dataset de prueba.
+
+```{r E6,exercise=T}
+
+rl_fitFinal <- reviews_wf2 %>%
+  add_model(rl_spec) %>%
+  # Ajusta en el dataset de entrenamiento y evalúa en el dataset de prueba
+  last_fit(reviews_split,
+           metrics = metric_set(f_meas,recall,precision)
+           )
+# recolectamos las métricas
+rl_fitFinal %>% collect_metrics()
+
+```
+
+Como es usual, las métricas son inferiores cuando se prueban en este conjunto de datos, ya que son datos "nuevos" a los que el modelo no esta "acostumbrado", de esta manera se simula lo que sucedería si se utiliza la aplicación en producción.
+
+### Importancia de las variables predictoras
+
+Un aspecto a considerar y tomar en cuenta es la importancia de las variables predictoras Y.Con este análisis podemos corroborar cuáles características están colaborando más en el modelo y cuáles no están teniendo efecto alguno, con la intención de realizar mejoras, ya sea eliminando o creando nuevas variables.
+
+```{r E7,exercise=TRUE}
+
+tokensImp<-pull_workflow_fit(rl_fit)$fit 
+
+tokensImp<- tokensImp$coefficients
+
+tokensImpDF <- data.frame(token=names(tokensImp),values=tokensImp) %>%
+  mutate(token=str_remove_all(token,"tfidf_comments_"))
+  
+tokensImpDF %>%
+  top_n(15, abs(tokensImpDF$values)) %>%
+  ungroup() %>%
+  ggplot(aes(fct_reorder(token, values), values, fill = values > 0)) +
+  geom_col(alpha = 0.8, show.legend = FALSE) +
+  coord_flip() +
+  labs(
+    x = NULL,
+    title = "Coefficients that increase/decrease probability the most")+
+  theme_minimal()
+
+```
+
+### Predecir nuevos datos
+
+Un paso final de evaluación es probar el modelo con datos totalmente nuevos de prueba.Para esto podemos utilizar la función `predict`
+
+```{r E8,exercise=TRUE}
+
+new_comment <- tribble(~comments,"this book is fantastic")
+new_comment
+
+prediction<-predict(rl_fit, new_data = new_comment)
+
+
+paste0("el resultado para el comentario ","'",new_comment,"'","es: ",prediction$.pred_class)
+
+```
+
+## Su Turno: Laboratorio Individual
+
+Utilizando el dataset de Spam proveído, **replique todos los pasos requeridos y ejemplificados en este tutorial** para generar un modelo de regresión logística que clasifique entre "*ham*" y "*spam*".
+
+**Nota:** No es necesario crear los gráficos de explicación de variables, pero es recomendable para una mejor comprensión del ejercicio.
+
+Debe crear un reporte R markdown y publicarlo en Rpubs y colocar el link correspondiente en PCC Virtual.
+
+Para la limpieza de este dataset, utilice la siguiente modificación de función
+
+```{r TG,eval=FALSE}
+
+Clean_String <- function(string){
+
+  # Remover caracteres no UTF-8
+  temp<- iconv(enc2utf8(string),sub="byte")
+  temp<- str_replace_all(temp,"[^[:graph:]]", " ") 
+  # Remover todo lo que no sea número o letra 
+  temp <- stringr::str_replace_all(temp,"[^a-zA-Z\\s]", " ")
+  # remover espacios extra
+  temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+  # minúscula
+  temp <- tolower(temp)
+  
+  return(temp)
+  
+}
+
+# Aplicar la función a los comentarios
+spamData$message <- Clean_String(spamData$message)
+
+```

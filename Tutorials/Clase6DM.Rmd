@@ -1,0 +1,403 @@
+---
+title: "Clase Minería de Datos 6:Introducción a modelos No Supervisados"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+    includes:
+      in_header: google-analytics.html
+runtime: shiny_prerendered
+theme: united
+description: >
+  Clase 6 de introducción a Minería de datos.Introducción a modelos no supervisados.
+---
+
+```{r setup, include=FALSE}
+
+
+library(learnr)
+library(knitr)
+library(ggplot2)
+library(stringr)
+library(dplyr)
+library(tidymodels)
+
+
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE,fig.width =8 , fig.height = 8)
+tutorial_options(exercise.timelimit = 120)
+knit_hooks$set(optipng = hook_optipng)
+knit_hooks$set(pngquant = hook_pngquant)
+
+
+USArrests<-read.csv("USArrests.csv", row.names = 1) 
+
+df <- scale(USArrests)
+
+kclust <- kmeans(df, centers = 8)
+
+set.seed(1234)
+
+kclusts <- 
+  tibble(k = 1:8) %>% # generamos una columna con cada número de cada a iterar
+  mutate(
+    kclust = map(k, ~kmeans(df, .x)), # se crean los clusters
+    tidied = map(kclust, tidy), # se obtiene la información en formato tidy
+    glanced = map(kclust, glance), # se obtiene el resumen general del cluster.
+    augmented = map(kclust, augment,df) # se mapea contra el dataframe original
+  )
+
+clusters <- 
+  kclusts %>%
+  unnest(cols = c(tidied)) 
+
+# Asignamiento de cluster a los datos originales en cada iteración
+assignments <- 
+  kclusts %>% 
+  unnest(cols = c(augmented))
+
+# Información resumen de cada iteración para graficar la inercia.
+clusterings <- 
+  kclusts %>%
+  unnest(cols = c(glanced))
+
+p1 <- 
+  ggplot(assignments, aes(x = Murder, y = UrbanPop)) +
+  geom_point(aes(color = .cluster), alpha = 0.8) + 
+  facet_wrap(~ k)
+
+
+```
+
+![](https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png){width="289"}
+
+## Modelos No Supervisados
+
+En clases anteriores trabajamos los modelos supervisados.En dichos modelos contamos con datos "etiquetados" con los valores pasados de la variable a predecir, para poder entrenar modelos que mediante algún algoritmo en particular permitan estimar el resultado de una observación nueva.
+
+En los **modelos no supervisados** la tarea del aprendizaje automático cambian un poco en el sentido que el resultado debe ser "descubierto" por el algoritmo, debido a que no contamos con una variable dependiente.De esta manera, debemos incluír un conjunto de datos de entrenamiento, con una cantidad razonable de variables independientes, para que en conjunto los datos y el algoritmo hagan su trabajo y descubran estos patrones útiles, interesantes y novedosos.
+
+![Ejemplo de Modelos No supervisados](https://static.javatpoint.com/tutorial/machine-learning/images/unsupervised-machine-learning-1.png)
+
+## Algunos tipos de Modelos No Supervisados
+
+Existen muchos tipos de modelos no supervisados, dentro de los cuáles podemos citar:
+
+-   **Dimension Reduction:** Este análisis conocido como "reducción de la dimensionalidad" y es útil cuando contamos con muchas variables independientes que **podrían ser redundantes** y requerimos resumir estos datos en variables o "dimensiones" con sentido e interpretabilidad, sin perder mucha información.Uno de los algoritmos más utilizados y conocidos es el PCA ( *Principal Component Analysis*).
+
+-   **Generative Modeling:** Estos modelos aprenden de la estructura de un conjunto de datos para generar nuevas muestras de datos con características similares.Por ejemplo, esto es utilizado en el campo llamado *computer vision* para dado un conjunto de imagenes de cierto tipo, generar nuevas imagenes similares.
+
+-   **Clustering:** El análisis de *clustering* o agrupamiento se utiliza cuando se desea descubrir grupos o clases de observaciones con características muy similares dentro de cada cluster, pero muy diferentes con respecto a observaciones de otros clusters.Este análisis se utiliza a menudo en lo que conocemos con "**segmentación**".
+
+-   **Anomaly detection:** Estos métodos utilizan los conjuntos de datos para encontrar patrones inusuales e identificar posibles observaciones que podrían ser consideradas anomalías, por su distancia con respecto a los valores "normales" desde un punto de vista univariado, bivariado o multivariado.
+
+-   **Association Rules:** Las reglas de asociación identifican correlaciones en datos multidimensionales para generar que set de características tienden a "aparecer" en conjunto en una situación en particular.Por ejemplo, reglas como "las personas que compran el item X ( proteína hidrogelizada) tienden a comprar el producto Y (Mantequilla de maní) en un 500% más que otros consumidores.De esta manera se pueden direccionar las campañas de marketing.
+
+## Ventajas y desventajas del aprendizaje no supervisado
+
+| Ventajas                                                                         | Desventajas                                                                                                      |
+|----------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| No se requiere de "etiquetar" datos"                                             | Puede conducir a a resultados menos precisos debido a que el algoritmo no conoce la respuesta correcta o exacta. |
+| Se utiliza para problemas más complejos en los que no tenemos datos etiquetados. | Es intrínsecamente más dificil de obtener buenos resultados al no contar con datos etiquetados.                  |
+
+: Desventajas y ventajas del aprendizaje no supervisado
+
+## Clustering
+
+En este tutorial vamos a trabajar en la tarea de *clustering* mediante elalgoritmoconocido como *K-means clustering.*
+
+Este método es uno de los más conocidos para generar cluster en datos multidimensionales. Este algoritmo trata de identificar **K** clusters de observaciones dado un conjunto dado de **P** variables.
+
+### Ejemplo Hola Mundo del Clustering
+
+Para desarrollar este algoritmo, debemos seguir los siguientes pasos.Consideremos el ejemplo en el que un banco desea ofrecer tarjetas de crédito a sus clientes.Actualmente, para este proceso, este banco observa de manera manual los detalles de cada cliente y basado en un análisis subjetivo otorga los límites y características de la tarjeta de crédito a entregar a cada cliente.Este proceso claramente no es eficiente y puede ser optimizado mediante un análisis cluster.
+
+Para efectos de simplificación del ejemplo, asumamos que el banco solo va a utilizar las variables de ingreso y deuda para efectos de realizar los cluster que serán utilizados para la estrategia de tarjetas de crédito.
+
+Después de recolectar y procesar los datos, podemos observar la relación de estas dos variables mediante un *scatterplot*:
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-08-14-46-17.png)
+
+Según el scatterplot de los datos podríamos asumir 4 *clusters* con fronteras demarcadas.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-08-14-47-20.png)
+
+El banco podría utilizar estos clusters para crear las estrategias de tarjeta de crédito para los clientes.
+
+Podemos entonces analizar las propiedades de los clusters:
+
+-   **Propiedad 1**: Todos los puntos **dentro de un cluster** deberían ser similares:
+
+    ![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-08-14-49-11.png)
+
+    Teniendo características similares hace que las estrategias de marketing puedan ser canalizadas.
+
+-   **Propiedad 2:** Los puntos de datos de diferentes *clusters* deben ser lo más distinto posible.
+
+En este ejemplo, solamente utilizamos dos variables y por lo tanto fue sencillo identificar los clusters por medio de una visualización.Lamentablemente, la mayoría de casos de uso de la vida real involucran mayor cantidad de variables y por lo tanto este método no es del todo eficiente.
+
+Sin embargo, en este punto podemos utilizar métricas como lo hicimos en los modelos supervisados , para decidir las características de los resultados del modelo.
+
+### Inercia
+
+La inercia calcula la suma de las distancias de todos los puntos de cada cluster con respecto al centro (llamado centroide) del *cluster*.Calculamos este valor para cada cluster y la inercia final será la suma de todas las distancias.esta distancia es también conocida como distancia *intra-cluster*.Este valor debe ser lo mínimo posible para tener clusters más compactos.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-08-15-32-17.png)
+
+### Indice Dunn
+
+La inercia se ocupa de la primera propiedad que analizamos para tener un análisis de cluster efectivo.Para la segunda propiedad(llamada distancia *inter-clusters)*, el índice Dunn llega al rescate.Este índice utiliza una relación para tomar en cuenta ambas propiedades.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-08-15-37-02.png)
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-08-15-37-22.png)
+
+En este caso queremos maximizar el índice de Dunn: a mayor sea el índice de Dunn, mejor será la calidad de los *clusters*.
+
+## Algoritmo K-means Clustering
+
+El algoritmo *K means* intenta minimizar la inercia o distancia *intra-clusters* con respecto a los centroides de cada grupo.Veamos paso a paso como trabaja el algoritmo:
+
+Tenemos estas observaciones que deseamos agrupar.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-09-12-21-43.png)
+
+### Paso 1: Escoger el número de *clusters K*
+
+Se debe escoger inicialmente el número de clusters.En nuestro ejemplo, escojemos 2 clusters inicialmente.
+
+### Paso 2: Escoger K puntos aleatorios como centroides:
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-09-12-23-55.png)
+
+Los puntos coloreados representan los seleccionados aleatoriamente como centroides temporales.
+
+### Paso 3: Asignar los puntos a los centroides más cercanos.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-09-12-24-35.png)
+
+La anterior imagen muestra como cada punto fue asignado al centroide más cercano, mediante alguna medida de distancia matemática.
+
+### Paso 4: Recalcular los valores de los centroides basado en los nuevos grupos.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-09-12-26-59.png)
+
+Se calcula el centroide de cada grupo como el promedio de las P variables.Las "x" representan los nuevos centroides recalculados.
+
+### Paso 5: Repetir paso 4 y paso 5.
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-09-12-28-14.png)
+
+### Criterio de salida para *K-means*
+
+El paso 5 puede durar eternamente si no se tiene un criterio de salida.Los más importantes criterios de parada son los siguientes:
+
+1.  Los valores de los centroides no varían significativamente entre nuevas iteraciones.
+
+2.  Las observaciones se mantienen en el mismo cluster.
+
+3.  Se llega a un número máximo de iteraciones.
+
+![Animación del proceso K means](https://miro.medium.com/max/960/1*umzqxI8Oeje8nU5EItF5dw.gif)
+
+### Escogencia del número adecuado de *clusters*
+
+En el paso 1 se escogió un número arbitrario de k con el objetivo de inicializar el algoritmo.Sin embargo, como sabemos cuál es el número adecuado de clusters que se debería de escoger?
+
+La respuesta a esta pregunta puede solucionarse desde un punto de vista de negocio( número de grupos requeridos para una implementación o caso de uso) o mediante una combinación de criterio de negocio y criterio analítico.
+
+Vamos a profundizar en una de las técnicas analíticas para ayudar a escoger el número de *clusters*.
+
+Volviendo a nuestro ejemplo de tarjetas de crédito, habíamos definido 4 clusters según el *scatterplot*.Sin embargo, si creamos un agrupamiento con k=8, nuestras métricas de calidad del cluster mejorarían ya que la variabilidad intra-cluster sería menor:
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-09-15-54-58.png)
+
+Entonces, cabe la pregunta de cuando detenerse?
+
+Podemos graficar la técnica conocida como el gráfico del codo, que muestra para cada k, el valor de la inercia:
+
+![](https://cdn.analyticsvidhya.com/wp-content/uploads/2019/08/Screenshot-from-2019-08-09-15-59-05.png)
+
+De esta manera podemos observar como al cambiar de 2 a 4 clusters, la mejora en la inercia es sustancial, del mismo modo que moverse de 4 a 6 clusters.Sin embargo, moverse de 6 a 8 y así en adelante, el cambio marginal es menor.De este modo, la escogencia de entre 6-10 clusters se encuentra el número óptimo y para definir el k final, se deben considerar aspectos de implementación, interpretación de los resultados y costo computacional.
+
+## K means en R
+
+Tal y como lo implementamos para la tarea de modelos supervisados, vamos a utilizar el framework de `tidymodels` y `tidyverse` para el *k-means.* En este caso, tenemos como objetivo analizar datos de arrestos en Estados Unidos mediante el dataset `USArrests` que contiene proporciones de arrestos por tipo de delito por estado.Básicamente, vamos a utlizar 2 funciones:
+
+-   `tidy()`
+
+-   `augment()`
+
+-   `glance()`
+
+Vamos a empezar cargando la data y visualizandola( del paquete `datasets`):
+
+```{r E0,exercise=T}
+
+
+# Visualizar datos
+head(USArrests,15)
+glimpse(USArrests)
+
+```
+
+Como observamos, el data frame contiene solo variables numéricas.Es importante mencionar acá que el algoritmo *K-means* solo maneja variables continuas debido a que calcula los grupos computando los centroides, que es un vector de promedios de cada variable.
+
+Otro aspecto importante a destacar es que como se visualiza en el resumen estadístico de las variables, la escala de cada variable es bastante diferente, lo cuál se puede comprobar con los valores medios y extremos.Esto puede afectar el cálculo de las distancias y por lo tanto los agrupamientos, dandole más peso a las variables de mayor escala.Es por este motivo que los datos se deben **escalar**, esto significa que se deben transformar a una escala estándar en donde el promedio y la desviación estándar sea la misma.Podemos comvenientemente utilizar la función `scale` para este paso:
+
+```{r E9,exercise=T}
+
+df <- scale(USArrests)
+
+head(df,10)
+
+# Comprobar nueva escala
+summary(df)
+
+
+```
+
+Con los datos escalados, podemos utilizar la función `kmeans` para crear un primer agrupamiento sobre los datos, definiendo arbitrariamente k=8
+
+```{r E10, exercise=T}
+
+kclust <- kmeans(df, centers = 8)
+kclust
+summary(kclust)
+
+```
+
+Como podemos observar, la información desplegada muestra los resultados para el `dataframe` escalado, lo cuál es poco práctico a efectos de entendimiento e interpretación.Por lo que podemos utilizar la función `augment()` para combinar los resultados con el `dataframe` original:
+
+```{r E11,exercise=T}
+
+augment(kclust, USArrests)
+
+
+```
+
+La función anterior clasifica cada observación con su respectivo cluster, mientras que la función `tidy()`, brinda información a nivel de cluster:
+
+```{r E12, exercise=TRUE}
+
+tidy(kclust)
+
+```
+
+Finalmente la función `glance()` brinda información resumen del *k-means*
+
+```{r E13, exercise=T}
+
+glance(kclust)
+
+```
+
+#### Análisis Exploratorio del K-Means
+
+Con la información arrojada por estas 3 funciones, podemos generar un proceso iterativo para explorar y analizar la relación entre las variables y los numeros de clusters, además de escoger el número más adecuado de k.
+
+Inicialmente, aprovechando en la función `map` (que itera una función un número definido de veces ), vamos a generar un `dataframe` resumen con toda la información requerida.
+
+```{r E14, exercise=T}
+
+set.seed(1234)
+
+kclusts <- 
+  tibble(k = 1:8) %>% # generamos una columna con cada número de cada a iterar
+  mutate(
+    kclust = map(k, ~kmeans(df, .x)), # se crean los clusters
+    tidied = map(kclust, tidy), # se obtiene la información en formato tidy
+    glanced = map(kclust, glance), # se obtiene el resumen general del cluster.
+    augmented = map(kclust, augment,df) # se mapea contra el dataframe original
+  )
+
+kclusts
+
+```
+
+El resultado es un `dataframe` que contiene en cada columna listas con dataframes adicionales.Podemos extraer cada uno de esos dataframes para utilizarlos en la creación de visualizaviones que nos indiquen como se conforman los clusters:
+
+```{r E15,exercise=T}
+
+#Información resumen de cada cluster e inercia por cada iteración
+clusters <- 
+  kclusts %>%
+  unnest(cols = c(tidied)) 
+
+clusters
+
+# Asignamiento de cluster a los datos originales en cada iteración
+assignments <- 
+  kclusts %>% 
+  unnest(cols = c(augmented))
+
+assignments
+
+# Información resumen de cada iteración para graficar la inercia.
+clusterings <- 
+  kclusts %>%
+  unnest(cols = c(glanced))
+
+clusterings
+
+```
+
+Con la información extraída convenientemente en `dataframes`, podemos empezar a graficar.Inicialmente vamos a utilizar dos variables para generar un *scatterplot* que coloree los puntos según el cluster asignado para cada una de las iteraciones de k.
+
+```{r E16, exercise=TRUE}
+
+p1 <- 
+  ggplot(assignments, aes(x = Murder, y = UrbanPop)) +
+  geom_point(aes(color = .cluster), alpha = 0.8) + 
+  facet_wrap(~ k)
+p1
+
+```
+
+A este gráfico le podemos añadir una marca de donde se encuentra el centroide de cada cluster para referencia:
+
+```{r E17, exercise=TRUE}
+
+p2 <- p1 + geom_point(data = clusters, size = 10, shape = "x")
+p2
+
+```
+
+Finalmente, podemos generar el gráfico de codo para determinar la mejor escogencia de k:
+
+```{r E18, exercise=TRUE}
+
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + 
+  theme_minimal()
+
+```
+
+Observando el gráfico de codo, pareciera que k=4 es un valor adecuado.D esta manera podríamos filtrar por el dataset y explorar la agrupación realizada:
+
+```{r E19, exercise=TRUE}
+
+assignments %>%
+  filter(k==4) %>%
+  select(.cluster,Murder:Rape) %>%
+  pivot_longer(!.cluster,names_to = "var", values_to = "value") %>%
+  ggplot(aes(x = var, y = value)) +
+  geom_boxplot(aes(color = .cluster), alpha = 0.8) + 
+  facet_grid(~ .cluster)+ 
+  theme_minimal()
+  
+  
+
+```
+
+## Su turno: Actividad Asincrónica
+
+**Continue** con el análisis de `USArrests` desarrollado en este tutorial para crear un reporte analítico que contenga lo siguiente(puede hacer uso de los 3 dataframes creados en este tutorial, clusters,assignments y clusterings según sea el caso).
+
+1.  Escogencia del número de k más adecuado según la técnica del codo.
+
+2.  Generar un nuevo dataframe solamente con este agrupamiento.
+
+3.  Comparar de manera resumen las métricas básicas ( media, mediana, máximo, mínimo) para cada cluster de las variables utilizadas para el agrupamiento.Describa que características tiene cada cluster ( perfile el cluster).
+
+4.  Muestre los estados que forman parte de cada cluster.

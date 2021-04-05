@@ -1,0 +1,270 @@
+---
+title: "Clase Minería de Datos 5:Continuación Introducción a los Modelos Supervisados"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+    includes:
+      in_header: google-analytics.html
+runtime: shiny_prerendered
+theme: united
+description: >
+  Clase 5 de introducción a Minería de datos.Incluye temas de modelos supervisados para la clasificación de textos .
+---
+
+```{r setup, include=FALSE}
+
+
+library(learnr)
+library(knitr)
+library(ggplot2)
+library(reshape2)
+library(forcats)
+library(stringr)
+library(dplyr)
+library(tidymodels)
+library(textrecipes)
+library(glmnet)
+library(stopwords)
+library(themis)
+
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE,fig.width =8 , fig.height = 8)
+tutorial_options(exercise.timelimit = 120)
+knit_hooks$set(optipng = hook_optipng)
+knit_hooks$set(pngquant = hook_pngquant)
+
+#Load all the needed objects to run tutorial
+#Run T5DataSetup in order to get the data objects if you dont have the file
+
+load("T5Data.RData")
+
+
+```
+
+![](https://www.tec.ac.cr/sites/default/files/media/branding/logo-tec.png){width="289"}
+
+## Mejorando la Calidad del modelo
+
+En este tutorial, vamos a ejemplificar como podemos mejorar la calidad del modelo de regresión logística creado en la clase anterior, por medio de un tipo de ajuste a la regresión especial llamado LASSO.
+
+## Alternativas para mejorar el modelo
+
+Como ya hemos podido observar, el primer modelo generado tiene mucho por mejorar.Los siguientes pueden ser diferentes enfoques para aumentar la calidad de las métricas:
+
+1.  Recopilar más datos para que el algoritmo pueda extraer más patrones ue puedan discriminar entre las categorias.
+
+2.  Seguir mejorando los *features o tokens* actuales para eliminar los que están generando ruido.
+
+3.  Incluir otras variables predictoras que no sean solamente el tf-Idf, como por ejemplo el largo del texto,cantidad de números,etc.Para esto podemos utilizar el enfoque del paquete [`textfeatures`](https://github.com/mkearney/textfeatures) que extrae convenientemente estas características adicionales.
+
+4.  Mejorar la regresión con algoritmos adicionales para optimizar los parámetros.
+
+Utilizar otras técnicas de clasificación, como árboles de clasificación,*random forest, Support Vector Machines* oRedes Neuronales.
+
+En este tutorial, vamos a ejemplificar la opción número 2 y 3.Para esto vamos a utilizar un algoritmo llamado regresión LASSO, que es un ajuste a la regresión logística que ya trabajamos.
+
+## Regresión LASSO
+
+La regresión LASSO(*least absolute shrinkage and selection operator)* es un método especial que automáticamente selecciona los mejores predictores(en nuestra aplicación los tokens y adicionalmente realiza un proceso de **regularización** de los parámetros de la regresión, con el objetivo de mejorar la efectividad y explicabilidad del modelo.
+
+La regularización es el proceso de "suavizar" los valores de los parámetros de la regresión, con el objetivo de evitar el sobre ajuste del modelo.El **sobre ajuste** del modelo se da cuando un algoritmo de *machine Learning* tiende a aprender en exceso los patrones de los datos de entrenamiento, patrones que pueden ser ruido aleatorio y no necesariamente patrones en la realidad.
+
+![](https://miro.medium.com/max/1648/1*JZbxrdzabrT33Yl-LrmShw.png)
+
+Volviendo a la regressión LASSO, esta introduce un parámetro adicional L, que indica una penalidad a los coeficientes de las variables predictoras.Este modelo ayuda a automatizar la escogencia de las mejores variables predictoras y esto es especialmente útil en modelos como el del ejemplo acá trabajado, al tener cientos de tokens que intentan ajustar si un comentario es positivo o negativo.
+
+### Ajustando la regresión LASSO con optimización de parámetros
+
+Vamos a utilizar el paquete `glmnet` para ajustar una regressión LASSO, pero antes debemos inicializar una receta y además vamos a crear un predictor adicional, que será la cantidad de caractéres de la variable *comments*:
+
+```{r E0,exercise=T}
+
+set.seed(1234) # Asegurar siempre una misma semilla aleatoria.
+
+#Reclasificar las 5 categorías de stars en 2 categorías
+#booksReviews ya tiene el proceso de limpieza de datos
+
+reviewClass <- booksReviews %>% # bookseviews ya está precargado y limpio.
+  mutate(class = factor(if_else(stars <= 3,"Not Great", "Great")),
+         len= str_length(comments)
+         )
+
+#Realizar la partición de las muestras
+
+reviews_split <- initial_split(reviewClass,prop=.7)
+
+reviews_train <- training(reviews_split)
+reviews_test <- testing(reviews_split)
+
+#Creamos la receta inicial
+
+reviews_recipe <- recipe(class ~ comments+len, 
+                         data = reviews_train)
+
+
+#Aplicar los pasos de procesamiento de datos
+
+reviews_recipeProcessed <- reviews_recipe %>%
+  step_text_normalization(comments) %>% # elimina caracteres extraños
+  step_tokenize(comments) %>%
+  step_stopwords(comments, keep = FALSE) %>%
+  step_untokenize(comments) %>%
+  step_tokenize(comments, token = "ngrams", 
+                options = list(n = 4, n_min = 1)) %>%
+  step_tokenfilter(comments, max_tokens = 200) %>%
+  step_tfidf(comments)  %>%
+  step_upsample(class) #alternativa a step_smote
+```
+
+Seguidamente, cargamos la librería `glmnet` y creamos el `workflow` inicial
+
+```{r E9,exercise=T}
+
+library(glmnet)
+
+# Creamos el workflow y la receta para el nuevo modelo
+reviews_wf <- workflow() %>%
+  add_recipe(reviews_recipeProcessed)
+
+# Especificación del modelo
+
+rlasso_spec <-  logistic_reg(penalty = tune(), mixture = 1) %>% # Mixture=1 se requiere para indicar que es LASSO
+  set_engine("glmnet")
+
+# Observamos el modelo especificado
+rlasso_spec
+
+#Ajustar el modelo con los datos
+
+lasso_wf <- workflow() %>%
+  add_recipe(reviews_recipeProcessed) %>%
+  add_model(rlasso_spec)
+
+# Observamos el modelo
+lasso_wf
+
+
+```
+
+Ahora, en este caso tendremos una diferencia con respecto a la regresión logística ajustada en la lección anterior.Este modelo tiene un parámetro adicional L (Lambda).Este parámetro debe ser optimizado para encontrar el valor que maximize las métricas de rendimiento del modelo, según el objetivo que andamos buscando.Para esto utilizamos la funciones `grid_regular`para definir un "*grid*" cuál parámetro vamos a optimizar y los respectivos valores de ese grid.Además debemos crear nuevamente los *folds* para entrenar este parámetro en los diferentes subsets de datos de entrenamiento:
+
+```{r E10, exercise=T}
+
+# Creamos un grid para entrenar los parametros adicionales del modelo
+lambda_grid <- grid_random(penalty(), size = 25)
+
+lambda_grid
+#Seteamos semilla aleatoria y creamos los subsets de la validación cruzada
+
+set.seed(123)
+reviews_folds <- vfold_cv(reviews_train,v=5)
+reviews_folds
+
+```
+
+Una vez definido el *grid* y los sets de validación cruzada, podemos proceder al modelo bajo esa estructura, utilizando la función `tune_grid`
+
+```{r E11,exercise=T}
+
+# Entrenamos el modelo con los diferentes valores del grid para que escoja los mejores valores de los parametros
+
+set.seed(2020)
+lasso_grid <- tune_grid(lasso_wf,
+                        resamples = reviews_folds,
+                        grid = lambda_grid,
+                        control = control_resamples(save_pred = TRUE),
+                        metrics = metric_set(f_meas, recall, precision)
+                        )
+
+lasso_grid
+
+#Visualizamos las métricas del modelo resultante
+lasso_grid %>%
+  collect_metrics()
+
+
+```
+
+### Selección del mejor modelo
+
+Dado que realizamos una optimización de los valores de lambda, podemos realizar visualizaciones para observar como varían los valores de las métricas de rendimiento de los modelos y tener una referencia para la escogencia del valor de Lambda.
+
+```{r E12, exercise=TRUE}
+
+
+#Visualizamos los cambios de las métricas en función de los valores de penalidad
+lasso_grid %>%
+  collect_metrics() %>%
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_line(size = 1.5, show.legend = FALSE) +
+  facet_wrap(~.metric) +
+  scale_x_log10() +
+  theme_minimal()
+
+```
+
+Con esa referencia podemos seleccionar específicamente cuál modelo finalmente escojemos con la función `select_best` y volvemos a entrenar con el valor de Lambda escogido, utilizando la función `finalize_workflow()` seguido de `fit` :
+
+```{r E13, exercise=T}
+
+#seleccionamos el mejor modelo según métrica F1 Score
+
+best_f <- lasso_grid %>%
+  select_best("f_meas")
+
+best_f
+
+#Entrenamos el modelo final con los valores del mejor modelo de entrenamiento
+final_lasso <- finalize_workflow(lasso_wf, best_f) %>%
+  fit(reviews_train)
+
+final_lasso
+
+```
+
+## Evaluación de resultados en datos de prueba
+
+Ajustado el modelo final, podemos proceder a evaluar el modelo pero ya con los datos de prueba, utilizando con la función `last_fit`:
+
+```{r E14, exercise=T}
+
+#Evaluamos el modelo con los datos de prueba
+review_final <- last_fit(final_lasso, 
+                         split=reviews_split,
+                         metrics = metric_set(f_meas, recall, precision)
+                         )
+
+# Observamos métricas del modelo evaluado en datos de prueba
+review_final %>%
+  collect_metrics()
+
+# Visualizar las predicciones del dataframe de prueba
+
+review_final %>%
+  collect_predictions %>%
+  head()
+
+```
+
+## Predecir nuevos datos
+
+Finalmente, al igual que realizamos con la regresión logística, podemos realizar predicciones sobre datos nuevos:
+
+```{r E15,exercise=T}
+
+comment<- "the story was good, however the book is bad."
+len<- str_length(comment)
+
+new_comment <- tribble(~comments,~len,comment,len)
+new_comment
+
+prediction<-predict(final_lasso, new_data = new_comment)
+
+
+paste0("el resultado para el comentario ","'",new_comment$comments,"'","es: ",
+       prediction$.pred_class)
+
+
+```
+
+## Su Turno: Laboratorio Clase Grupal
